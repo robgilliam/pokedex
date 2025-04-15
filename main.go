@@ -32,7 +32,12 @@ func main() {
 				continue
 			}
 
-			if err := command.callback(&conf); err != nil {
+			var param string
+			if len(input) > 1 {
+				param = input[1]
+			}
+
+			if err := command.callback(&conf, param); err != nil {
 				log.Fatal(err)
 			}
 		}

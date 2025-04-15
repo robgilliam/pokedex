@@ -19,10 +19,10 @@ type config struct {
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(*config) error
+	callback    func(*config, string) error
 }
 
-func commandHelp(*config) error {
+func commandHelp(*config, string) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -34,7 +34,45 @@ func commandHelp(*config) error {
 	return nil
 }
 
-func commandMap(conf *config) error {
+func commandExplore(conf *config, location string) error {
+	url := "https://pokeapi.co/api/v2/location-area/" + location
+
+	data, cached := conf.cache.Get(url)
+	if !cached {
+		res, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf("GET locations failed: %w", err)
+		}
+		defer res.Body.Close()
+
+		data, err = io.ReadAll(res.Body)
+		if err != nil {
+			return fmt.Errorf("Could not read response body : %w", err)
+		}
+		conf.cache.Add(url, data)
+	}
+
+	pokemon := struct {
+		PokemonEncounters []struct {
+			Pokemon struct {
+				Name string `json:"name"`
+				Url  string `json:"url"`
+			} `json:"pokemon"`
+		} `json:"pokemon_encounters"`
+	}{}
+
+	if err := json.Unmarshal(data, &pokemon); err != nil {
+		return fmt.Errorf("Could not read response body: %w", err)
+	}
+
+	for _, pokemon := range pokemon.PokemonEncounters {
+		fmt.Println(pokemon.Pokemon.Name)
+	}
+
+	return nil
+}
+
+func commandMap(conf *config, _ string) error {
 	next, prev, err := doMap(conf.NextUrl, &conf.cache)
 
 	if err == nil {
@@ -45,7 +83,7 @@ func commandMap(conf *config) error {
 	return err
 }
 
-func commandMapb(conf *config) error {
+func commandMapb(conf *config, _ string) error {
 	if conf.PrevUrl == "" {
 		fmt.Println("you're on the first page")
 		return nil
@@ -102,7 +140,7 @@ func doMap(url string, cache *pokecache.Cache) (string, string, error) {
 	return locations.Next, locations.Previous, nil
 }
 
-func commandExit(*config) error {
+func commandExit(*config, string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
@@ -114,6 +152,11 @@ func getCommands() map[string]cliCommand {
 			name:        "help",
 			description: "Displays a help message",
 			callback:    commandHelp,
+		},
+		"explore": {
+			name:        "explore <area>",
+			description: "Shows pokemon in the area",
+			callback:    commandExplore,
 		},
 		"map": {
 			name:        "map",
