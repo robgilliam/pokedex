@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Binary for this project only
+pokedex
+
 # Test binary, built with `go test -c`
 *.test
 
