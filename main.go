@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 )
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
+	conf := config{}
 
 	for {
 		fmt.Print("Pokedex > ")
@@ -25,8 +27,9 @@ func main() {
 				continue
 			}
 
-			command.callback()
-
+			if err := command.callback(&conf); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }
