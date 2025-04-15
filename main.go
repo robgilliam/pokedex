@@ -19,7 +19,7 @@ func main() {
 
 		input := cleanInput(scanner.Text())
 		if len(input) > 0 {
-			command, exists := commands[input[0]]
+			command, exists := getCommands()[input[0]]
 			if !exists {
 				fmt.Println("Unknown command")
 				continue
