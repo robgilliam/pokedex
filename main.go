@@ -6,11 +6,16 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/robgilliam/pokedex/internal/pokecache"
 )
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
-	conf := config{}
+	conf := config{
+		cache: pokecache.NewCache(5 * time.Second),
+	}
 
 	for {
 		fmt.Print("Pokedex > ")

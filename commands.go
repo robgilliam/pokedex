@@ -3,11 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+
+	"github.com/robgilliam/pokedex/internal/pokecache"
 )
 
 type config struct {
+	cache   pokecache.Cache
 	NextUrl string
 	PrevUrl string
 }
@@ -31,7 +35,7 @@ func commandHelp(*config) error {
 }
 
 func commandMap(conf *config) error {
-	next, prev, err := doMap(conf.NextUrl)
+	next, prev, err := doMap(conf.NextUrl, &conf.cache)
 
 	if err == nil {
 		conf.NextUrl = next
@@ -47,7 +51,7 @@ func commandMapb(conf *config) error {
 		return nil
 	}
 
-	next, prev, err := doMap(conf.PrevUrl)
+	next, prev, err := doMap(conf.PrevUrl, &conf.cache)
 
 	if err == nil {
 		conf.NextUrl = next
@@ -57,18 +61,26 @@ func commandMapb(conf *config) error {
 	return err
 }
 
-func doMap(url string) (string, string, error) {
+func doMap(url string, cache *pokecache.Cache) (string, string, error) {
 	if url == "" {
 		url = "https://pokeapi.co/api/v2/location-area/"
 	}
 
-	res, err := http.Get(url)
-	if err != nil {
-		return "", "", fmt.Errorf("GET locations failed: %w", err)
-	}
-	defer res.Body.Close()
+	data, cached := cache.Get(url)
+	if !cached {
+		res, err := http.Get(url)
+		if err != nil {
+			return "", "", fmt.Errorf("GET locations failed: %w", err)
+		}
+		defer res.Body.Close()
 
-	decoder := json.NewDecoder(res.Body)
+		data, err = io.ReadAll(res.Body)
+		if err != nil {
+			return "", "", fmt.Errorf("Could not read response body : %w", err)
+		}
+		cache.Add(url, data)
+	}
+
 	locations := struct {
 		Count    int    `json:"count"`
 		Next     string `json:"next"`
@@ -79,7 +91,7 @@ func doMap(url string) (string, string, error) {
 		}
 	}{}
 
-	if err := decoder.Decode(&locations); err != nil {
+	if err := json.Unmarshal(data, &locations); err != nil {
 		return "", "", fmt.Errorf("Could not read response body: %w", err)
 	}
 
