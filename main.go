@@ -20,9 +20,13 @@ func main() {
 		input := cleanInput(scanner.Text())
 		if len(input) > 0 {
 			command, exists := commands[input[0]]
-			if exists {
-				command.callback()
+			if !exists {
+				fmt.Println("Unknown command")
+				continue
 			}
+
+			command.callback()
+
 		}
 	}
 }
