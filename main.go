@@ -19,9 +19,17 @@ func main() {
 
 		input := cleanInput(scanner.Text())
 		if len(input) > 0 {
-			fmt.Println("Your command was: " + input[0])
+			if input[0] == "exit" {
+				commandExit()
+			}
 		}
 	}
+}
+
+func commandExit() error {
+	fmt.Println("Closing the Pokedex... Goodbye!")
+	os.Exit(0)
+	return nil
 }
 
 func cleanInput(text string) []string {
