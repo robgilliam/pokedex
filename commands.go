@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 
@@ -12,8 +13,9 @@ import (
 
 type config struct {
 	cache   pokecache.Cache
-	NextUrl string
-	PrevUrl string
+	nextUrl string
+	prevUrl string
+	pokedex map[string]any
 }
 
 type cliCommand struct {
@@ -34,25 +36,74 @@ func commandHelp(*config, string) error {
 	return nil
 }
 
-func commandExplore(conf *config, location string) error {
-	url := "https://pokeapi.co/api/v2/location-area/" + location
+func commandCatch(conf *config, pokemonName string) error {
+	fmt.Printf("Throwing a Pokeball at %s...\n", pokemonName)
+
+	url := "https://pokeapi.co/api/v2/pokemon/" + pokemonName
 
 	data, cached := conf.cache.Get(url)
 	if !cached {
 		res, err := http.Get(url)
 		if err != nil {
-			return fmt.Errorf("GET locations failed: %w", err)
+			return fmt.Errorf("GET pokemon failed: %w", err)
 		}
 		defer res.Body.Close()
 
 		data, err = io.ReadAll(res.Body)
 		if err != nil {
-			return fmt.Errorf("Could not read response body : %w", err)
+			return fmt.Errorf("Could not read pokemon response: %w", err)
 		}
 		conf.cache.Add(url, data)
 	}
 
 	pokemon := struct {
+		BaseExperience int `json:"base_experience"`
+	}{}
+
+	if err := json.Unmarshal(data, &pokemon); err != nil {
+		return fmt.Errorf("Could not process pokemon data: %w", err)
+	}
+
+	chanceToCatch := 200
+	if pokemon.BaseExperience >= chanceToCatch {
+		chanceToCatch = 1
+	} else if pokemon.BaseExperience > 0 {
+		chanceToCatch -= pokemon.BaseExperience
+	}
+
+	// fmt.Printf("DEBUG: %s has base experience %d (chance to catch: %d)\n", pokemonName, pokemon.BaseExperience, chanceToCatch)
+
+	if rand.Intn(200) < chanceToCatch {
+		fmt.Println(pokemonName + " was caught!")
+		conf.pokedex[pokemonName] = true
+	} else {
+		fmt.Println(pokemonName + " escaped!")
+	}
+
+	fmt.Println("DEBUG: pokedex contents", conf.pokedex)
+
+	return nil
+}
+
+func commandExplore(conf *config, locationName string) error {
+	url := "https://pokeapi.co/api/v2/location-area/" + locationName
+
+	data, cached := conf.cache.Get(url)
+	if !cached {
+		res, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf("GET location failed: %w", err)
+		}
+		defer res.Body.Close()
+
+		data, err = io.ReadAll(res.Body)
+		if err != nil {
+			return fmt.Errorf("Could not read location response: %w", err)
+		}
+		conf.cache.Add(url, data)
+	}
+
+	location := struct {
 		PokemonEncounters []struct {
 			Pokemon struct {
 				Name string `json:"name"`
@@ -61,11 +112,11 @@ func commandExplore(conf *config, location string) error {
 		} `json:"pokemon_encounters"`
 	}{}
 
-	if err := json.Unmarshal(data, &pokemon); err != nil {
-		return fmt.Errorf("Could not read response body: %w", err)
+	if err := json.Unmarshal(data, &location); err != nil {
+		return fmt.Errorf("Could not process location data: %w", err)
 	}
 
-	for _, pokemon := range pokemon.PokemonEncounters {
+	for _, pokemon := range location.PokemonEncounters {
 		fmt.Println(pokemon.Pokemon.Name)
 	}
 
@@ -73,27 +124,27 @@ func commandExplore(conf *config, location string) error {
 }
 
 func commandMap(conf *config, _ string) error {
-	next, prev, err := doMap(conf.NextUrl, &conf.cache)
+	next, prev, err := doMap(conf.nextUrl, &conf.cache)
 
 	if err == nil {
-		conf.NextUrl = next
-		conf.PrevUrl = prev
+		conf.nextUrl = next
+		conf.prevUrl = prev
 	}
 
 	return err
 }
 
 func commandMapb(conf *config, _ string) error {
-	if conf.PrevUrl == "" {
+	if conf.prevUrl == "" {
 		fmt.Println("you're on the first page")
 		return nil
 	}
 
-	next, prev, err := doMap(conf.PrevUrl, &conf.cache)
+	next, prev, err := doMap(conf.prevUrl, &conf.cache)
 
 	if err == nil {
-		conf.NextUrl = next
-		conf.PrevUrl = prev
+		conf.nextUrl = next
+		conf.prevUrl = prev
 	}
 
 	return err
@@ -114,7 +165,7 @@ func doMap(url string, cache *pokecache.Cache) (string, string, error) {
 
 		data, err = io.ReadAll(res.Body)
 		if err != nil {
-			return "", "", fmt.Errorf("Could not read response body : %w", err)
+			return "", "", fmt.Errorf("Could not read locations response: %w", err)
 		}
 		cache.Add(url, data)
 	}
@@ -130,7 +181,7 @@ func doMap(url string, cache *pokecache.Cache) (string, string, error) {
 	}{}
 
 	if err := json.Unmarshal(data, &locations); err != nil {
-		return "", "", fmt.Errorf("Could not read response body: %w", err)
+		return "", "", fmt.Errorf("Could not process locations data: %w", err)
 	}
 
 	for _, result := range locations.Results {
@@ -152,6 +203,11 @@ func getCommands() map[string]cliCommand {
 			name:        "help",
 			description: "Displays a help message",
 			callback:    commandHelp,
+		},
+		"catch": {
+			name:        "catch <pokemon>",
+			description: "Attempt to catch a Pokemon",
+			callback:    commandCatch,
 		},
 		"explore": {
 			name:        "explore <area>",
