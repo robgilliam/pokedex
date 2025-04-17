@@ -8,14 +8,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/robgilliam/pokedex/internal/pokecache"
+	"github.com/robgilliam/pokedex/internal/pokeapi"
 )
+
+type config struct {
+	client  *pokeapi.CacheClient
+	pokedex map[string]pokeapi.Pokemon
+
+	nextLocationsUrl string
+	prevLocationsUrl string
+}
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	conf := config{
-		cache:   pokecache.NewCache(5 * time.Second),
-		pokedex: make(map[string]any),
+		client:  pokeapi.NewCacheClient(5 * time.Second, 3 * time.Second),
+		pokedex: make(map[string]pokeapi.Pokemon),
 	}
 
 	for {
@@ -33,12 +41,7 @@ func main() {
 				continue
 			}
 
-			var param string
-			if len(input) > 1 {
-				param = input[1]
-			}
-
-			if err := command.callback(&conf, param); err != nil {
+			if err := command.callback(&conf, input[1:]...); err != nil {
 				log.Fatal(err)
 			}
 		}
